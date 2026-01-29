@@ -6,6 +6,7 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
+use winit::window::WindowLevel;
 
 struct GpuState {
     window: Arc<Window>,
@@ -14,6 +15,7 @@ struct GpuState {
     size: winit::dpi::PhysicalSize<u32>,
     surface: wgpu::Surface<'static>,
     surface_format: wgpu::TextureFormat,
+    alpha_mode: wgpu::CompositeAlphaMode,
 }
 
 impl GpuState {
@@ -34,6 +36,15 @@ impl GpuState {
         let cap = surface.get_capabilities(&adapter);
         let surface_format = cap.formats[0];
 
+        // Enable transparency if possible.
+        let alpha_mode = if cap.alpha_modes.contains(&wgpu::CompositeAlphaMode::PostMultiplied) {
+            wgpu::CompositeAlphaMode::PostMultiplied
+        } else if cap.alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
+            wgpu::CompositeAlphaMode::PreMultiplied
+        } else {
+            wgpu::CompositeAlphaMode::Auto
+        };
+
         let state = Self {
             window,
             device,
@@ -41,6 +52,7 @@ impl GpuState {
             size,
             surface,
             surface_format,
+            alpha_mode,
         };
 
         // Configure surface for the first time
@@ -59,7 +71,7 @@ impl GpuState {
             format: self.surface_format,
             // Request compatibility with the sRGB-format texture view we're going to create later.
             view_formats: vec![self.surface_format.add_srgb_suffix()],
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            alpha_mode: self.alpha_mode,
             width: self.size.width,
             height: self.size.height,
             desired_maximum_frame_latency: 2,
@@ -145,6 +157,9 @@ impl ApplicationHandler for App {
                 )
                 .unwrap(),
         );
+
+        window.set_cursor_hittest(false);
+        window.set_window_level(WindowLevel::AlwaysOnTop);
 
         let state = pollster::block_on(GpuState::new(window.clone()));
         self.state = Some(state);
